@@ -19,7 +19,7 @@ class SensorPacket(BaseModel):
 def home():
     return {"message": "sup biotch"}
 
-@@app.post("/upload")
+@app.post("/upload")
 async def upload_data(packets: Union[dict, List[dict]]):
     """
     Accepts a single sensor packet OR a list of packets.
