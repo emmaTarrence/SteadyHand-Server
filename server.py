@@ -19,37 +19,42 @@ class SensorPacket(BaseModel):
 def home():
     return {"message": "sup biotch"}
 
-@app.post("/upload")
-async def upload_data(packet: dict):
-    # Accept raw dict so we can handle multiple timestamp formats
-    ts = packet.get("timestamp")
+@@app.post("/upload")
+async def upload_data(packets: Union[dict, List[dict]]):
+    """
+    Accepts a single sensor packet OR a list of packets.
+    """
+    # Convert single packet to list for consistent handling
+    if isinstance(packets, dict):
+        packets = [packets]
 
-    # Handle struct_time-style list
-    if isinstance(ts, (list, tuple)) and len(ts) >= 6:
-        try:
-            year, mon, day, hour, minute, second = ts[:6]
-            from datetime import datetime
-            timestamp = datetime(year, mon, day, hour, minute, second).isoformat()
-        except Exception:
+    saved_count = 0
+
+    for packet in packets:
+        ts = packet.get("timestamp")
+
+        # Handle ESP32-style timestamps (like [year, month, day, hour, min, sec])
+        if isinstance(ts, (list, tuple)) and len(ts) >= 6:
+            try:
+                year, mon, day, hour, minute, second = ts[:6]
+                timestamp = datetime(year, mon, day, hour, minute, second).isoformat()
+            except Exception:
+                timestamp = datetime.utcnow().isoformat()
+        elif isinstance(ts, str):
+            timestamp = ts
+        else:
             timestamp = datetime.utcnow().isoformat()
-    elif isinstance(ts, str):
-        timestamp = ts
-    else:
-        # fallback if invalid or missing
-        from datetime import datetime
-        timestamp = datetime.utcnow().isoformat()
 
-    accel_x = packet.get("accel_x", 0.0)
-    accel_y = packet.get("accel_y", 0.0)
-    accel_z = packet.get("accel_z", 0.0)
-    temperature = packet.get("temperature", 0.0)
+        accel_x = packet.get("accel_x", 0.0)
+        accel_y = packet.get("accel_y", 0.0)
+        accel_z = packet.get("accel_z", 0.0)
+        temperature = packet.get("temperature", 0.0)
 
-    # Save to database
-    insert_data(timestamp, accel_x, accel_y, accel_z, temperature)
+        insert_data(timestamp, accel_x, accel_y, accel_z, temperature)
+        saved_count += 1
 
-    print(f"✅ Saved entry at {timestamp} → Accel: ({accel_x:.2f},{accel_y:.2f},{accel_z:.2f}), Temp: {temperature:.1f}")
-    return {"status": "success", "timestamp_saved": timestamp}
-
+    print(f"✅ Saved {saved_count} entries")
+    return {"status": "success", "records_saved": saved_count}
 
 @app.get("/data")
 async def get_data(limit: int = 1000):
