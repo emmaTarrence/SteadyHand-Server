@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from database import init_db, insert_data
 import sqlite3
 from datetime import datetime
+from typing import List, Union
 
 app = FastAPI()
 init_db()
