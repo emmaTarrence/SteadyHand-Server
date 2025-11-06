@@ -13,6 +13,11 @@ class SensorPacket(BaseModel):
     accel_y: float
     accel_z: float
     temperature: float
+    
+
+@app.get("/")
+def home():
+    return {"message": "sup biotch"}
 
 @app.post("/upload")
 async def upload_data(packet: dict):
