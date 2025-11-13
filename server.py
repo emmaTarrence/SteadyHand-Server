@@ -74,7 +74,8 @@ async def get_data(limit: int = 1000):
     cur = conn.cursor()
 
     cur.execute("""
-        SELECT * FROM sensor_data
+        SELECT id, timestamp, accel_x, accel_y, accel_z, temperature
+        FROM sensor_data
         ORDER BY id DESC
         LIMIT %s;
     """, (limit,))
@@ -84,4 +85,17 @@ async def get_data(limit: int = 1000):
     cur.close()
     conn.close()
 
-    return {"data": rows}
+    # Convert snake_case → PascalCase for MAUI
+    normalized = [
+        {
+            "Id": row["id"],
+            "Timestamp": row["timestamp"],
+            "AccelX": row["accel_x"],
+            "AccelY": row["accel_y"],
+            "AccelZ": row["accel_z"],
+            "Temperature": row["temperature"],
+        }
+        for row in rows
+    ]
+
+    return {"data": normalized}
