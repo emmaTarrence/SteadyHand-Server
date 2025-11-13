@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from database_postgres import init_db, insert_data, get_connection
+from database import init_db, insert_data, get_connection
 from datetime import datetime
 from typing import List, Union
 
