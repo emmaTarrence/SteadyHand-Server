@@ -1,48 +1,45 @@
-import sqlite3
 import os
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
-# Use Render-approved writable directory
-PERSIST_DIR = "/opt/render/project/.data"
-DB_PATH = f"{PERSIST_DIR}/steadyhand.db"
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
+def get_connection():
+    return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
 
 def init_db():
-    # Make sure the directory exists
-    os.makedirs(PERSIST_DIR, exist_ok=True)
+    conn = get_connection()
+    cur = conn.cursor()
 
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-
-    c.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS sensor_data (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT,
-            accel_x REAL,
-            accel_y REAL,
-            accel_z REAL,
-            temperature REAL
+            id SERIAL PRIMARY KEY,
+            timestamp TEXT NOT NULL,
+            accel_x REAL NOT NULL,
+            accel_y REAL NOT NULL,
+            accel_z REAL NOT NULL,
+            temperature REAL NOT NULL
         );
     """)
 
-    # Use WAL mode for concurrency safety
-    c.execute("PRAGMA journal_mode=WAL;")
-
     conn.commit()
+    cur.close()
     conn.close()
 
 
 def insert_data(timestamp, ax, ay, az, temp):
     try:
-        conn = sqlite3.connect(DB_PATH, timeout=5)
-        c = conn.cursor()
+        conn = get_connection()
+        cur = conn.cursor()
 
-        c.execute("""
-            INSERT INTO sensor_data
-            (timestamp, accel_x, accel_y, accel_z, temperature)
-            VALUES (?, ?, ?, ?, ?)
+        cur.execute("""
+            INSERT INTO sensor_data (timestamp, accel_x, accel_y, accel_z, temperature)
+            VALUES (%s, %s, %s, %s, %s);
         """, (timestamp, ax, ay, az, temp))
 
         conn.commit()
+        cur.close()
         conn.close()
 
     except Exception as e:
-        print("🔥 SQLITE INSERT ERROR:", e)
+        print("🔥 POSTGRES INSERT ERROR:", e)

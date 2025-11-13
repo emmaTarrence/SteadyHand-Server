@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from database import init_db, insert_data
+from database_postgres import init_db, insert_data
 import sqlite3
 from datetime import datetime
 from typing import List, Union
@@ -57,17 +57,23 @@ async def upload_data(packets: Union[dict, List[dict]]):
     print(f"✅ Saved {saved_count} entries")
     return {"status": "success", "records_saved": saved_count}
 
+
 @app.get("/data")
 async def get_data(limit: int = 1000):
-    conn = sqlite3.connect("/opt/render/project/.data/steadyhand.db")
+    conn = get_connection()
+    cur = conn.cursor()
 
-    c = conn.cursor()
-    c.execute("SELECT * FROM sensor_data ORDER BY id DESC LIMIT ?", (limit,))
-    rows = c.fetchall()
+    cur.execute("""
+        SELECT * FROM sensor_data
+        ORDER BY id DESC
+        LIMIT %s;
+    """, (limit,))
+
+    rows = cur.fetchall()
+
+    cur.close()
     conn.close()
 
-    print("[SERVER] Most recent timestamps:")
-    for r in rows[:5]:
-        print(" →", r[1])
-
     return {"data": rows}
+
+
