@@ -59,7 +59,8 @@ async def upload_data(packets: Union[dict, List[dict]]):
 
 @app.get("/data")
 async def get_data(limit: int = 1000):
-    conn = sqlite3.connect("/var/data/steadyhand.db")
+    conn = sqlite3.connect("/opt/render/project/.data/steadyhand.db")
+
     c = conn.cursor()
     c.execute("SELECT * FROM sensor_data ORDER BY id DESC LIMIT ?", (limit,))
     rows = c.fetchall()

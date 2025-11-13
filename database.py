@@ -1,18 +1,17 @@
 import sqlite3
 import os
 
-# Render persistent storage location
-DB_PATH = "/var/data/steadyhand.db"
-
+# Use Render-approved writable directory
+PERSIST_DIR = "/opt/render/project/.data"
+DB_PATH = f"{PERSIST_DIR}/steadyhand.db"
 
 def init_db():
-    # Ensure persistent directory exists
-    os.makedirs("/var/data", exist_ok=True)
+    # Make sure the directory exists
+    os.makedirs(PERSIST_DIR, exist_ok=True)
 
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
-    # Create table if not exists
     c.execute("""
         CREATE TABLE IF NOT EXISTS sensor_data (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -24,7 +23,7 @@ def init_db():
         );
     """)
 
-    # Prevent SQLite locking issues
+    # Use WAL mode for concurrency safety
     c.execute("PRAGMA journal_mode=WAL;")
 
     conn.commit()
@@ -33,7 +32,6 @@ def init_db():
 
 def insert_data(timestamp, ax, ay, az, temp):
     try:
-        # timeout helps avoid locking crashes
         conn = sqlite3.connect(DB_PATH, timeout=5)
         c = conn.cursor()
 
