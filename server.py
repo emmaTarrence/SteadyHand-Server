@@ -3,6 +3,8 @@ from pydantic import BaseModel
 from database import init_db, insert_data, get_connection
 from datetime import datetime
 from typing import List, Union
+import os
+print("📌 DATABASE_URL = ", os.environ.get("DATABASE_URL"))
 
 app = FastAPI()
 init_db()
