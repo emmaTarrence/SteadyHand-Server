@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from database_postgres import init_db, insert_data
-import sqlite3
+from database_postgres import init_db, insert_data, get_connection
 from datetime import datetime
 from typing import List, Union
 
@@ -20,12 +19,10 @@ class SensorPacket(BaseModel):
 def home():
     return {"message": "sup biotch"}
 
+
 @app.post("/upload")
 async def upload_data(packets: Union[dict, List[dict]]):
-    """
-    Accepts a single sensor packet OR a list of packets.
-    """
-    # Convert single packet to list for consistent handling
+    # Convert single packet to list
     if isinstance(packets, dict):
         packets = [packets]
 
@@ -34,7 +31,6 @@ async def upload_data(packets: Union[dict, List[dict]]):
     for packet in packets:
         ts = packet.get("timestamp")
 
-        # Handle ESP32-style timestamps (like [year, month, day, hour, min, sec])
         if isinstance(ts, (list, tuple)) and len(ts) >= 6:
             try:
                 year, mon, day, hour, minute, second = ts[:6]
@@ -75,5 +71,3 @@ async def get_data(limit: int = 1000):
     conn.close()
 
     return {"data": rows}
-
-
