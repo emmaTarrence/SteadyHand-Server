@@ -21,6 +21,18 @@ class SensorPacket(BaseModel):
 def home():
     return {"message": "sup biotch"}
 
+@app.get("/debug-db")
+def debug_db():
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM sensor_data;")
+        count = cur.fetchone()
+        cur.close()
+        conn.close()
+        return {"rows_in_postgres": count}
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.post("/upload")
 async def upload_data(packets: Union[dict, List[dict]]):
