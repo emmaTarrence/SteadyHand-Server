@@ -4,6 +4,9 @@ from database import init_db, insert_data, get_connection
 from datetime import datetime
 from typing import List, Union
 import os
+
+ACC_SCALE = 1.0 / 16384.0  # adjust to match your IMU
+
 print("📌 DATABASE_URL = ", os.environ.get("DATABASE_URL"))
 
 app = FastAPI()
@@ -11,11 +14,7 @@ init_db()
 
 class SensorPacket(BaseModel):
     timestamp: str
-    accel_x: float
-    accel_y: float
-    accel_z: float
-    temperature: float
-    
+    samples: list[int]
 
 @app.get("/")
 def home():
@@ -34,39 +33,87 @@ def debug_db():
     except Exception as e:
         return {"error": str(e)}
 
+# @app.post("/upload")
+# async def upload_data(packets: Union[dict, List[dict]]):
+#     # Convert single packet to list
+#     if isinstance(packets, dict):
+#         packets = [packets]
+
+#     saved_count = 0
+
+#     for packet in packets:
+#         ts = packet.get("timestamp")
+
+#         if isinstance(ts, (list, tuple)) and len(ts) >= 6:
+#             try:
+#                 year, mon, day, hour, minute, second = ts[:6]
+#                 timestamp = datetime(year, mon, day, hour, minute, second).isoformat()
+#             except Exception:
+#                 timestamp = datetime.utcnow().isoformat()
+#         elif isinstance(ts, str):
+#             timestamp = ts
+#         else:
+#             timestamp = datetime.utcnow().isoformat()
+
+#         accel_x = packet.get("accel_x", 0.0)
+#         accel_y = packet.get("accel_y", 0.0)
+#         accel_z = packet.get("accel_z", 0.0)
+#         temperature = packet.get("temperature", 0.0)
+
+#         insert_data(timestamp, accel_x, accel_y, accel_z, temperature)
+#         saved_count += 1
+
+#     print(f"✅ Saved {saved_count} entries")
+#     return {"status": "success", "records_saved": saved_count}
+
 @app.post("/upload")
 async def upload_data(packets: Union[dict, List[dict]]):
-    # Convert single packet to list
+    # Normalize to list
     if isinstance(packets, dict):
         packets = [packets]
 
     saved_count = 0
 
     for packet in packets:
-        ts = packet.get("timestamp")
+        if "samples" in packet:
+            ts = packet.get("timestamp")
 
-        if isinstance(ts, (list, tuple)) and len(ts) >= 6:
-            try:
-                year, mon, day, hour, minute, second = ts[:6]
-                timestamp = datetime(year, mon, day, hour, minute, second).isoformat()
-            except Exception:
-                timestamp = datetime.utcnow().isoformat()
-        elif isinstance(ts, str):
-            timestamp = ts
-        else:
-            timestamp = datetime.utcnow().isoformat()
+            # Base timestamp: Unix seconds -> ISO string
+            if isinstance(ts, (int, float)):
+                base_dt = datetime.utcfromtimestamp(ts)
+            else:
+                base_dt = datetime.utcnow()
+            timestamp = base_dt.isoformat()
 
-        accel_x = packet.get("accel_x", 0.0)
-        accel_y = packet.get("accel_y", 0.0)
-        accel_z = packet.get("accel_z", 0.0)
-        temperature = packet.get("temperature", 0.0)
+            samples = packet.get("samples") or []
 
-        insert_data(timestamp, accel_x, accel_y, accel_z, temperature)
-        saved_count += 1
+            # Normalize samples:
+            # - if samples[0] is list/tuple, assume [[ax,ay,az,temp], ...]
+            # - else assume flat [ax0,ay0,az0,temp0,ax1,...] and chunk into 4s
+            if samples and isinstance(samples[0], (list, tuple)):
+                normalized_samples = samples
+            else:
+                normalized_samples = []
+                CHUNK = 4  # ax, ay, az, temp
+                for i in range(0, len(samples), CHUNK):
+                    chunk = samples[i:i + CHUNK]
+                    if len(chunk) == CHUNK:
+                        normalized_samples.append(chunk)
+
+            for sample in normalized_samples:
+                raw_ax, raw_ay, raw_az, raw_temp = sample
+
+                accel_x = float(raw_ax) * ACC_SCALE
+                accel_y = float(raw_ay) * ACC_SCALE
+                accel_z = float(raw_az) * ACC_SCALE
+                temperature = float(raw_temp)  # adjust if you want °C instead of raw
+
+                insert_data(timestamp, accel_x, accel_y, accel_z, temperature)
+                saved_count += 1
+
 
     print(f"✅ Saved {saved_count} entries")
     return {"status": "success", "records_saved": saved_count}
-
 
 @app.get("/data")
 async def get_data(limit: int = 1000):
