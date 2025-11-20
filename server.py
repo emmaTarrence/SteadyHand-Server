@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from database import init_db, insert_data, get_connection
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Union
 import os
 
@@ -75,42 +75,51 @@ async def upload_data(packets: Union[dict, List[dict]]):
     saved_count = 0
 
     for packet in packets:
-        if "samples" in packet:
-            ts = packet.get("timestamp")
+        if "samples" not in packet:
+            continue
 
-            # Base timestamp: Unix seconds -> ISO string
-            if isinstance(ts, (int, float)):
-                base_dt = datetime.utcfromtimestamp(ts)
-            else:
-                base_dt = datetime.utcnow()
-            timestamp = base_dt.isoformat()
+        ts = packet.get("timestamp")
 
-            samples = packet.get("samples") or []
+        # Base timestamp: Unix seconds -> datetime
+        if isinstance(ts, (int, float)):
+            base_dt = datetime.utcfromtimestamp(ts)
+        else:
+            base_dt = datetime.utcnow()
 
-            # Normalize samples:
-            # - if samples[0] is list/tuple, assume [[ax,ay,az,temp], ...]
-            # - else assume flat [ax0,ay0,az0,temp0,ax1,...] and chunk into 4s
-            if samples and isinstance(samples[0], (list, tuple)):
-                normalized_samples = samples
-            else:
-                normalized_samples = []
-                CHUNK = 4  # ax, ay, az, temp
-                for i in range(0, len(samples), CHUNK):
-                    chunk = samples[i:i + CHUNK]
-                    if len(chunk) == CHUNK:
-                        normalized_samples.append(chunk)
+        # Sample period: default 20 ms (50 Hz), but allow override
+        period_ms = packet.get("period_ms", 20)
+        period_sec = period_ms / 1000.0
 
-            for sample in normalized_samples:
-                raw_ax, raw_ay, raw_az, raw_temp = sample
+        samples = packet.get("samples") or []
 
-                accel_x = float(raw_ax) * ACC_SCALE
-                accel_y = float(raw_ay) * ACC_SCALE
-                accel_z = float(raw_az) * ACC_SCALE
-                temperature = float(raw_temp)  # adjust if you want °C instead of raw
+        # Normalize samples:
+        # - if samples[0] is list/tuple, assume [[ax,ay,az,temp], ...]
+        # - else assume flat [ax0,ay0,az0,temp0,ax1,...] and chunk into 4s
+        if samples and isinstance(samples[0], (list, tuple)):
+            normalized_samples = samples
+        else:
+            normalized_samples = []
+            CHUNK = 4  # ax, ay, az, temp
+            for i in range(0, len(samples), CHUNK):
+                chunk = samples[i:i + CHUNK]
+                if len(chunk) == CHUNK:
+                    normalized_samples.append(chunk)
 
-                insert_data(timestamp, accel_x, accel_y, accel_z, temperature)
-                saved_count += 1
+        # Now insert each sample with its own offset timestamp
+        for idx, sample in enumerate(normalized_samples):
+            raw_ax, raw_ay, raw_az, raw_temp = sample
 
+            # timestamp for this specific sample
+            sample_dt = base_dt + timedelta(seconds=idx * period_sec)
+            timestamp_str = sample_dt.isoformat()
+
+            accel_x = float(raw_ax) * ACC_SCALE
+            accel_y = float(raw_ay) * ACC_SCALE
+            accel_z = float(raw_az) * ACC_SCALE
+            temperature = float(raw_temp)
+
+            insert_data(timestamp_str, accel_x, accel_y, accel_z, temperature)
+            saved_count += 1
 
     print(f"✅ Saved {saved_count} entries")
     return {"status": "success", "records_saved": saved_count}
