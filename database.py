@@ -44,9 +44,8 @@ def init_db():
 # -------------------------------------------------------------------
 # INSERT RAW DATA
 # -------------------------------------------------------------------
-def insert_data(timestamp, ax, ay, az, temp):
+def insert_data(timestamp, ax, ay, az, temp, conn):
     try:
-        conn = get_connection()
         cur = conn.cursor()
 
         cur.execute("""
@@ -56,7 +55,6 @@ def insert_data(timestamp, ax, ay, az, temp):
 
         conn.commit()
         cur.close()
-        conn.close()
 
     except Exception as e:
         print("🔥 POSTGRES INSERT ERROR:", e)
@@ -65,9 +63,8 @@ def insert_data(timestamp, ax, ay, az, temp):
 # -------------------------------------------------------------------
 # ARCHIVE DATA OLDER THAN 1 WEEK
 # -------------------------------------------------------------------
-def archive_old_data():
+def archive_old_data(conn):
     try:
-        conn = get_connection()
         cur = conn.cursor()
 
         # 1. Convert timestamp text → real timestamp
@@ -94,7 +91,6 @@ def archive_old_data():
 
         conn.commit()
         cur.close()
-        conn.close()
 
     except Exception as e:
         print("🔥 ARCHIVE ERROR:", e)
