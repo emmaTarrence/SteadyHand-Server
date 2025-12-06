@@ -88,10 +88,8 @@ async def upload_data(packets: Union[dict, List[dict]]):
             
             insert_data(timestamp_str, accel_x, accel_y, accel_z, temperature, conn)
             saved_count += 1
-    
-    archive_old_data(conn)
-    conn.close()
-    
+
+    # archive_old_data()
     return {"status": "success", "records_saved": saved_count}
 
 @app.get("/data")
