@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from database import init_db, insert_data, get_connection
+from database import init_db, insert_data, get_connection, archive_old_data
 from datetime import datetime, timedelta
 from typing import List, Union
 import os
@@ -33,39 +33,6 @@ def debug_db():
     except Exception as e:
         return {"error": str(e)}
 
-# @app.post("/upload")
-# async def upload_data(packets: Union[dict, List[dict]]):
-#     # Convert single packet to list
-#     if isinstance(packets, dict):
-#         packets = [packets]
-
-#     saved_count = 0
-
-#     for packet in packets:
-#         ts = packet.get("timestamp")
-
-#         if isinstance(ts, (list, tuple)) and len(ts) >= 6:
-#             try:
-#                 year, mon, day, hour, minute, second = ts[:6]
-#                 timestamp = datetime(year, mon, day, hour, minute, second).isoformat()
-#             except Exception:
-#                 timestamp = datetime.utcnow().isoformat()
-#         elif isinstance(ts, str):
-#             timestamp = ts
-#         else:
-#             timestamp = datetime.utcnow().isoformat()
-
-#         accel_x = packet.get("accel_x", 0.0)
-#         accel_y = packet.get("accel_y", 0.0)
-#         accel_z = packet.get("accel_z", 0.0)
-#         temperature = packet.get("temperature", 0.0)
-
-#         insert_data(timestamp, accel_x, accel_y, accel_z, temperature)
-#         saved_count += 1
-
-#     print(f"✅ Saved {saved_count} entries")
-#     return {"status": "success", "records_saved": saved_count}
-
 @app.post("/upload")
 async def upload_data(packets: Union[dict, List[dict]]):
     # Normalize to list
@@ -73,6 +40,7 @@ async def upload_data(packets: Union[dict, List[dict]]):
         packets = [packets]
 
     saved_count = 0
+    conn = get_connection()
 
     for packet in packets:
         if "samples" not in packet:
@@ -117,8 +85,8 @@ async def upload_data(packets: Union[dict, List[dict]]):
             accel_y = float(raw_ay) * ACC_SCALE
             accel_z = float(raw_az) * ACC_SCALE
             temperature = float(raw_temp)
-
-            insert_data(timestamp_str, accel_x, accel_y, accel_z, temperature)
+            
+            insert_data(timestamp_str, accel_x, accel_y, accel_z, temperature, conn)
             saved_count += 1
         conn.close()
 
