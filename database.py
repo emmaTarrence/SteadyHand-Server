@@ -118,13 +118,29 @@ def restore_sensor_data():
     conn.close()
     print("Restored sensor_data from sensor_data_backup.")
 
-def seed_fake_week(num_samples=5_670_000):
+def seed_fake_week(target_rows=5_670_000):
     """
-    Insert synthetic 1 week of data at 50 Hz (≈5.67M samples).
-    Uses a single bulk INSERT with generate_series for speed.
+    Ensure the sensor_data table has ~target_rows samples.
+    It checks how many rows exist and only inserts the difference.
     """
     conn = get_connection()
     cur = conn.cursor()
+
+    # How many rows are there now?
+    cur.execute("SELECT COUNT(*) AS count FROM sensor_data;")
+    row = cur.fetchone()
+    current = row["count"]          # <-- dict key, not index
+    remaining = target_rows - current
+
+    print(f"Current rows: {current}, need to add: {remaining}")
+
+    if remaining <= 0:
+        print("Already at or above target; nothing to insert.")
+        cur.close()
+        conn.close()
+        return
+
+    # Insert only the remaining rows
     cur.execute("""
         INSERT INTO sensor_data (timestamp, accel_x, accel_y, accel_z, temperature)
         SELECT
@@ -138,8 +154,9 @@ def seed_fake_week(num_samples=5_670_000):
             (random()*2 - 1)::real AS accel_z,
             (25 + random()*5)::real AS temperature
         FROM generate_series(1, %s) AS s(n);
-    """, (num_samples,))
+    """, (remaining,))
+
     conn.commit()
     cur.close()
     conn.close()
-    print(f"Inserted {num_samples} fake samples.")
+    print(f"Inserted {remaining} fake samples (now close to {target_rows}).")
