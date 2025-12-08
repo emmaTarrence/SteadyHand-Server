@@ -94,3 +94,52 @@ def archive_old_data(conn):
 
     except Exception as e:
         print("🔥 ARCHIVE ERROR:", e)
+        
+def backup_sensor_data():
+    """Save current data so we can restore it later."""
+    conn = get_connection()
+    cur = conn.cursor()
+    # optional: drop old backup if it exists
+    cur.execute("DROP TABLE IF EXISTS sensor_data_backup;")
+    cur.execute("CREATE TABLE sensor_data_backup AS TABLE sensor_data;")
+    conn.commit()
+    cur.close()
+    conn.close()
+    print("Backed up current sensor_data into sensor_data_backup.")
+
+def restore_sensor_data():
+    """Restore data from the backup table."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("TRUNCATE TABLE sensor_data;")
+    cur.execute("INSERT INTO sensor_data SELECT * FROM sensor_data_backup;")
+    conn.commit()
+    cur.close()
+    conn.close()
+    print("Restored sensor_data from sensor_data_backup.")
+
+def seed_fake_week(num_samples=5_670_000):
+    """
+    Insert synthetic 1 week of data at 50 Hz (≈5.67M samples).
+    Uses a single bulk INSERT with generate_series for speed.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO sensor_data (timestamp, accel_x, accel_y, accel_z, temperature)
+        SELECT
+            -- simulate timestamps at 50 Hz (every 20 ms)
+            to_char(
+                NOW() + (n * interval '20 milliseconds'),
+                'YYYY-MM-DD"T"HH24:MI:SS.MS'
+            ) AS timestamp,
+            (random()*2 - 1)::real AS accel_x,
+            (random()*2 - 1)::real AS accel_y,
+            (random()*2 - 1)::real AS accel_z,
+            (25 + random()*5)::real AS temperature
+        FROM generate_series(1, %s) AS s(n);
+    """, (num_samples,))
+    conn.commit()
+    cur.close()
+    conn.close()
+    print(f"Inserted {num_samples} fake samples.")
