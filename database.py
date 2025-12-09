@@ -55,6 +55,7 @@ def insert_data(timestamp, ax, ay, az, temp, conn):
 
         conn.commit()
         cur.close()
+        archive_old_data(conn)
 
     except Exception as e:
         print("🔥 POSTGRES INSERT ERROR:", e)
@@ -62,15 +63,46 @@ def insert_data(timestamp, ax, ay, az, temp, conn):
 
 # -------------------------------------------------------------------
 # ARCHIVE DATA OLDER THAN 1 WEEK
-# -------------------------------------------------------------------
-def archive_old_data(conn):
+MAX_ROWS = 5_670_000  # 7 days @ 4.5 hours/day, 50 Hz
+
+def archive_old_data(conn, max_rows: int = MAX_ROWS):
     try:
         cur = conn.cursor()
 
-        # 1. Convert timestamp text → real timestamp
-        # 2. Filter older than 7 days
-        # 3. Group by minute
-        # 4. Compute averages
+        # 1. How many rows do we have?
+        cur.execute("SELECT COUNT(*) AS count FROM sensor_data;")
+        total = cur.fetchone()["count"]
+
+        if total <= max_rows:
+            # Nothing to archive yet
+            print(f"No archiving needed. total={total}, limit={max_rows}")
+            cur.close()
+            return
+
+        rows_to_trim = total - max_rows
+        print(f"Archiving oldest {rows_to_trim} rows (total={total}, limit={max_rows})")
+
+        # 2. Find a cutoff timestamp such that everything up to that point
+        #    represents approximately `rows_to_trim` oldest rows.
+        #    We take the timestamp of the `rows_to_trim`-th oldest sample.
+        cur.execute("""
+            SELECT timestamp::timestamp AS cutoff_ts
+            FROM sensor_data
+            ORDER BY timestamp::timestamp
+            OFFSET %s - 1
+            LIMIT 1;
+        """, (rows_to_trim,))
+
+        row = cur.fetchone()
+        if not row or row["cutoff_ts"] is None:
+            print("⚠️ Could not determine cutoff timestamp; aborting archive.")
+            cur.close()
+            return
+
+        cutoff_ts = row["cutoff_ts"]
+        print(f"Using cutoff_ts={cutoff_ts} for archiving.")
+
+        # 3. Archive all rows up to that cutoff, summarized by minute
         cur.execute("""
             INSERT INTO archive_data (minute_start, avg_accel, avg_temp)
             SELECT
@@ -78,22 +110,24 @@ def archive_old_data(conn):
                 AVG(SQRT(accel_x*accel_x + accel_y*accel_y + accel_z*accel_z)) AS avg_accel,
                 AVG(temperature) AS avg_temp
             FROM sensor_data
-            WHERE timestamp::timestamp < NOW() - INTERVAL '7 days'
+            WHERE timestamp::timestamp <= %s
             GROUP BY minute_start
             ORDER BY minute_start;
-        """)
+        """, (cutoff_ts,))
 
-        # 5. Delete high-frequency rows older than 1 week
+        # 4. Delete the high-frequency rows we just summarized
         cur.execute("""
             DELETE FROM sensor_data
-            WHERE timestamp::timestamp < NOW() - INTERVAL '7 days';
-        """)
+            WHERE timestamp::timestamp <= %s;
+        """, (cutoff_ts,))
 
         conn.commit()
         cur.close()
+        print("✅ Archive + delete complete.")
 
     except Exception as e:
         print("🔥 ARCHIVE ERROR:", e)
+
         
 def backup_sensor_data():
     """Save current data so we can restore it later."""
