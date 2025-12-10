@@ -94,7 +94,7 @@ async def upload_data(packets: Union[dict, List[dict]]):
     return {"status": "success", "records_saved": saved_count}
 
 @app.get("/data")
-async def get_data(limit: int = 1000):
+async def get_data():
     conn = get_connection()
     cur = conn.cursor()
 
