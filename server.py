@@ -103,7 +103,7 @@ async def get_data():
         FROM sensor_data
         ORDER BY id DESC
         LIMIT %s;
-    """)
+    """, (limit,))
 
     rows = cur.fetchall()
 
@@ -124,3 +124,4 @@ async def get_data():
     ]
 
     return {"data": normalized}
+
