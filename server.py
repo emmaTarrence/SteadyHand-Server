@@ -101,9 +101,8 @@ async def get_data():
     cur.execute("""
         SELECT id, timestamp, accel_x, accel_y, accel_z, temperature
         FROM sensor_data
-        ORDER BY id DESC
-        LIMIT %s;
-    """, (limit,))
+        ORDER BY id ASC;
+    """)
 
     rows = cur.fetchall()
 
@@ -124,4 +123,3 @@ async def get_data():
     ]
 
     return {"data": normalized}
-
