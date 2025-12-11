@@ -101,7 +101,7 @@ async def get_data():
     cur.execute("""
         SELECT id, timestamp, accel_x, accel_y, accel_z, temperature
         FROM sensor_data
-        ORDER BY id ASC;
+        ORDER BY timestamp ASC;
     """)
 
     rows = cur.fetchall()
